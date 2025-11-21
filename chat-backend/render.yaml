@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: chat-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_CLIENT
+        value: postgres
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: chat-db
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: chat-db
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: chat-db
+          property: database
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: chat-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: chat-db
+          property: password
+      - key: DATABASE_SSL
+        value: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: APP_KEYS
+        generateValue: true
+      - key: API_TOKEN_SALT
+        generateValue: true
+      - key: TRANSFER_TOKEN_SALT
+        generateValue: true
+
+databases:
+  - name: chat-db
+    databaseName: chat_database
+    user: chat_user
