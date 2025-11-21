@@ -6,8 +6,14 @@ class ChatPage extends StatefulWidget {
   final int sender;
   final int receiver;
   final String token;
+  final String receiverName;
 
-  ChatPage({required this.sender, required this.receiver, required this.token});
+  ChatPage({
+    required this.sender,
+    required this.receiver,
+    required this.token,
+    this.receiverName = "Chat",
+  });
 
   @override
   _ChatPageState createState() => _ChatPageState();
@@ -97,7 +103,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Chat")),
+      appBar: AppBar(title: Text(widget.receiverName)),
       body: Column(
         children: [
           Expanded(

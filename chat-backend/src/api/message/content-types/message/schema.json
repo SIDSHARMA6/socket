@@ -4,22 +4,27 @@
   "info": {
     "singularName": "message",
     "pluralName": "messages",
-    "displayName": "message"
+    "displayName": "Message",
+    "description": ""
   },
   "options": {
-    "draftAndPublish": true
+    "draftAndPublish": false
   },
   "pluginOptions": {},
   "attributes": {
+    "text": {
+      "type": "text",
+      "required": true
+    },
     "sender": {
       "type": "relation",
-      "relation": "oneToOne",
-      "target": "api::message.message"
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     },
     "receiver": {
       "type": "relation",
-      "relation": "oneToOne",
-      "target": "api::message.message"
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     }
   }
 }

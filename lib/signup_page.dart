@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'chat_page.dart';
+import 'users_list_page.dart';
 
 class SignupPage extends StatefulWidget {
   @override
@@ -38,9 +38,8 @@ class _SignupPageState extends State<SignupPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatPage(
-            sender: userId,
-            receiver: userId == 1 ? 2 : 1,
+          builder: (_) => UsersListPage(
+            currentUserId: userId,
             token: result['jwt'],
           ),
         ),

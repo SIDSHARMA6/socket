@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'chat_page.dart';
+import 'users_list_page.dart';
 import 'signup_page.dart';
 import 'forgot_password_page.dart';
 
@@ -36,9 +36,8 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatPage(
-            sender: userId,
-            receiver: userId == 1 ? 2 : 1,
+          builder: (_) => UsersListPage(
+            currentUserId: userId,
             token: result['jwt'],
           ),
         ),
