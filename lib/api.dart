@@ -8,7 +8,14 @@ class ApiService {
 
   static Future<List> getMessages() async {
     try {
+      print("=== GET MESSAGES (NO AUTH) ===");
+      print("URL: $baseUrl/api/messages?populate=*");
+
       final res = await http.get(Uri.parse("$baseUrl/api/messages?populate=*"));
+
+      print("Status: ${res.statusCode}");
+      print("Response: ${res.body}");
+
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         return data["data"] ?? [];
@@ -22,16 +29,36 @@ class ApiService {
 
   static Future<List> getMessagesWithAuth(String token) async {
     try {
+      print("=== GET MESSAGES WITH AUTH ===");
+      print("URL: $baseUrl/api/messages?populate=*");
+      print("Token: ${token.substring(0, 20)}...");
+
       final res = await http.get(
         Uri.parse("$baseUrl/api/messages?populate=*"),
         headers: {
           'Authorization': 'Bearer $token',
         },
       );
+
+      print("Status: ${res.statusCode}");
+      print("Response: ${res.body}");
+
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        return data ?? [];
+        print("Decoded data type: ${data.runtimeType}");
+
+        // Check if data is already a list or wrapped in "data" field
+        if (data is List) {
+          print("Data is List, length: ${data.length}");
+          return data;
+        } else if (data is Map && data.containsKey('data')) {
+          print("Data is Map with 'data' field");
+          return data['data'] ?? [];
+        }
+        print("Data format not recognized");
+        return [];
       }
+      print("Non-200 status code");
       return [];
     } catch (e) {
       print("Error fetching messages: $e");

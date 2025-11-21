@@ -50,11 +50,18 @@ class AuthService {
 
   static Future<bool> sendOtp(String email) async {
     try {
+      print("=== SENDING OTP ===");
+      print("Email: $email");
+      print("URL: ${ApiService.baseUrl}/api/auth/send-otp");
+
       final res = await http.post(
         Uri.parse("${ApiService.baseUrl}/api/auth/send-otp"),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       );
+
+      print("Response status: ${res.statusCode}");
+      print("Response body: ${res.body}");
 
       return res.statusCode == 200;
     } catch (e) {
@@ -66,6 +73,10 @@ class AuthService {
   static Future<bool> verifyOtpAndReset(
       String email, String otp, String newPassword) async {
     try {
+      print("=== VERIFYING OTP ===");
+      print("Email: $email");
+      print("OTP: $otp");
+
       final res = await http.post(
         Uri.parse("${ApiService.baseUrl}/api/auth/verify-otp"),
         headers: {'Content-Type': 'application/json'},
@@ -75,6 +86,9 @@ class AuthService {
           'newPassword': newPassword,
         }),
       );
+
+      print("Response status: ${res.statusCode}");
+      print("Response body: ${res.body}");
 
       return res.statusCode == 200;
     } catch (e) {

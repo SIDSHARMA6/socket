@@ -16,31 +16,41 @@ const transporter = nodemailer.createTransport({
 
 module.exports = {
   async sendOtp(ctx) {
+    console.log('=== SEND OTP REQUEST ===');
     const { email } = ctx.request.body;
+    console.log('Email received:', email);
 
     if (!email) {
+      console.log('ERROR: No email provided');
       return ctx.badRequest('Email is required');
     }
 
     // Check if user exists
+    console.log('Checking if user exists...');
     const user = await strapi.query('plugin::users-permissions.user').findOne({
       where: { email }
     });
 
     if (!user) {
+      console.log('ERROR: User not found for email:', email);
       return ctx.badRequest('User not found');
     }
 
+    console.log('User found:', user.username);
+
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log('Generated OTP:', otp);
     
     // Store OTP with 10 minute expiry
     otpStore.set(email, {
       otp,
       expires: Date.now() + 10 * 60 * 1000
     });
+    console.log('OTP stored in memory');
 
     // Send email
+    console.log('Attempting to send email...');
     try {
       await transporter.sendMail({
         from: '943fa5001@smtp-brevo.com',
@@ -60,9 +70,12 @@ module.exports = {
         `
       });
 
+      console.log('Email sent successfully!');
       ctx.send({ message: 'OTP sent successfully' });
     } catch (error) {
-      console.error('Email error:', error);
+      console.error('=== EMAIL ERROR ===');
+      console.error('Error details:', error);
+      console.error('Error message:', error.message);
       ctx.badRequest('Failed to send email');
     }
   },

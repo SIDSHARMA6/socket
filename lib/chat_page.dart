@@ -33,24 +33,41 @@ class _ChatPageState extends State<ChatPage> {
 
   void loadOldMessages() async {
     try {
+      print("=== LOADING OLD MESSAGES ===");
+      print("Sender ID: ${widget.sender}");
+      print("Receiver ID: ${widget.receiver}");
+
       final old = await ApiService.getMessagesWithAuth(widget.token);
+      print("Raw messages received: $old");
+      print("Number of messages: ${old.length}");
+
       setState(() {
         messages = old
             .map((e) {
+              print("Processing message: $e");
+              // Handle both direct response and nested data structure
               final text = e["text"]?.toString() ?? "";
-              final senderId = e["sender"]?["id"];
+              final senderId =
+                  e["sender"] is Map ? e["sender"]["id"] : e["sender"];
               final isMe = senderId == widget.sender;
+              print("Text: $text, SenderId: $senderId, IsMe: $isMe");
               return {"text": text, "isMe": isMe};
             })
             .where((msg) => (msg["text"] as String).isNotEmpty)
             .toList();
       });
+
+      print("Processed messages count: ${messages.length}");
     } catch (e) {
       print("Error loading messages: $e");
     }
   }
 
   void connectSocket() {
+    print("=== CONNECTING TO SOCKET ===");
+    print("Socket URL: ${ApiService.baseUrl}");
+    print("Listening on channel: message-${widget.sender}");
+
     socket = IO.io(ApiService.baseUrl, <String, dynamic>{
       "transports": ["websocket"],
       "autoConnect": false,
@@ -59,17 +76,34 @@ class _ChatPageState extends State<ChatPage> {
     socket.connect();
 
     socket.onConnect((_) {
-      print("Connected to socket");
+      print("✅ Socket connected successfully!");
+      print("Socket ID: ${socket.id}");
+    });
+
+    socket.onConnectError((data) {
+      print("❌ Socket connection error: $data");
+    });
+
+    socket.onDisconnect((_) {
+      print("⚠️ Socket disconnected");
     });
 
     socket.on("message-${widget.sender}", (data) {
+      print("=== RECEIVED MESSAGE ON SOCKET ===");
+      print("Raw data: $data");
       try {
         final text = data["text"]?.toString();
-        final senderId = data["sender"]?["id"];
+        final senderId =
+            data["sender"] is Map ? data["sender"]["id"] : data["sender"];
+        print("Text: $text");
+        print("Sender ID: $senderId");
+        print("Is from me: ${senderId == widget.sender}");
+
         if (text != null && text.isNotEmpty) {
           setState(() {
             messages.add({"text": text, "isMe": senderId == widget.sender});
           });
+          print("Message added to list. Total messages: ${messages.length}");
         }
       } catch (e) {
         print("Error receiving message: $e");
@@ -80,16 +114,32 @@ class _ChatPageState extends State<ChatPage> {
   void sendMsg() {
     if (controller.text.trim().isEmpty) return;
 
+    print("=== SENDING MESSAGE ===");
+    print("Text: ${controller.text}");
+    print("Sender: ${widget.sender}");
+    print("Receiver: ${widget.receiver}");
+    print("Socket connected: ${socket.connected}");
+
     try {
-      socket.emit("sendMessage", {
+      final messageData = {
         "text": controller.text,
         "sender": widget.sender,
         "receiver": widget.receiver
+      };
+
+      print("Emitting data: $messageData");
+      socket.emit("sendMessage", messageData);
+      print("✅ Message emitted to socket");
+
+      // Add message to UI immediately (optimistic update)
+      setState(() {
+        messages.add({"text": controller.text, "isMe": true});
       });
+      print("Message added to UI. Total: ${messages.length}");
 
       controller.clear();
     } catch (e) {
-      print("Error sending message: $e");
+      print("❌ Error sending message: $e");
     }
   }
 
