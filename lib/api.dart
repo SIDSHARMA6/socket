@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class ApiService {
   // For local development: http://localhost:1337 (emulator) or http://YOUR_IP:1337 (device)
   // For production: https://your-app.onrender.com
-  static String baseUrl = "http://localhost:1337";
+  static String baseUrl = "https://socket-cxer.onrender.com";
 
   static Future<List> getMessages() async {
     try {
