@@ -5,7 +5,7 @@ class ApiService {
   // For local development: http://localhost:1337 (emulator) or http://YOUR_IP:1337 (device)
   // For production: https://your-app.onrender.com
   // Use 10.0.2.2 for Android emulator, or your computer IP for physical device
-  static String baseUrl = "http://10.0.2.2:1337";
+  static String baseUrl = "https://socket-cxer.onrender.com";
 
   static Future<List> getMessages() async {
     try {

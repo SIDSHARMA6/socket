@@ -6,6 +6,11 @@ class AuthService {
   static Future<Map<String, dynamic>?> signup(
       String username, String email, String password) async {
     try {
+      print("=== SIGNUP REQUEST ===");
+      print("URL: ${ApiService.baseUrl}/api/auth/local/register");
+      print("Username: $username");
+      print("Email: $email");
+
       final res = await http.post(
         Uri.parse("${ApiService.baseUrl}/api/auth/local/register"),
         headers: {'Content-Type': 'application/json'},
@@ -16,12 +21,19 @@ class AuthService {
         }),
       );
 
+      print("Response Status: ${res.statusCode}");
+      print("Response Body: ${res.body}");
+
       if (res.statusCode == 200) {
-        return jsonDecode(res.body);
+        final data = jsonDecode(res.body);
+        print("✅ Signup successful!");
+        return data;
+      } else {
+        print("❌ Signup failed with status: ${res.statusCode}");
+        return null;
       }
-      return null;
     } catch (e) {
-      print("Signup error: $e");
+      print("❌ Signup error: $e");
       return null;
     }
   }
