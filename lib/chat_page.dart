@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'api.dart';
-import 'dart:async';
 
 class ChatPage extends StatefulWidget {
   final int sender;
@@ -20,62 +19,19 @@ class ChatPage extends StatefulWidget {
   _ChatPageState createState() => _ChatPageState();
 }
 
-enum MessageStatus { sending, sent, delivered, read, failed }
-
-class ChatMessage {
-  final String text;
-  final bool isMe;
-  final String time;
-  final String? tempId;
-  final int? messageId;
-  MessageStatus status;
-
-  ChatMessage({
-    required this.text,
-    required this.isMe,
-    required this.time,
-    this.tempId,
-    this.messageId,
-    this.status = MessageStatus.sending,
-  });
-}
-
 class _ChatPageState extends State<ChatPage> {
   late IO.Socket socket;
-  List<ChatMessage> messages = [];
+  List<Map<String, dynamic>> messages = [];
   TextEditingController controller = TextEditingController();
   final ScrollController scrollController = ScrollController();
-
   bool isConnected = false;
-  bool isTyping = false;
-  bool receiverTyping = false;
   bool isLoading = true;
-  Timer? typingTimer;
 
   @override
   void initState() {
     super.initState();
     connectSocket();
     loadOldMessages();
-
-    // Listen to text changes for typing indicator
-    controller.addListener(onTextChanged);
-  }
-
-  void onTextChanged() {
-    if (controller.text.isNotEmpty && !isTyping) {
-      isTyping = true;
-      socket.emit('typing', {'receiver': widget.receiver, 'isTyping': true});
-    }
-
-    // Reset typing timer
-    typingTimer?.cancel();
-    typingTimer = Timer(Duration(seconds: 2), () {
-      if (isTyping) {
-        isTyping = false;
-        socket.emit('typing', {'receiver': widget.receiver, 'isTyping': false});
-      }
-    });
   }
 
   void loadOldMessages() async {
@@ -83,12 +39,15 @@ class _ChatPageState extends State<ChatPage> {
       setState(() => isLoading = true);
 
       final old = await ApiService.getMessagesWithAuth(widget.token);
+      print("📥 Loaded ${old.length} messages");
 
       setState(() {
         messages = old.where((e) {
           final senderId = e["sender"] is Map ? e["sender"]["id"] : e["sender"];
           final receiverId =
               e["receiver"] is Map ? e["receiver"]["id"] : e["receiver"];
+
+          // Only messages between these 2 users
           return (senderId == widget.sender && receiverId == widget.receiver) ||
               (senderId == widget.receiver && receiverId == widget.sender);
         }).map((e) {
@@ -96,48 +55,40 @@ class _ChatPageState extends State<ChatPage> {
           final senderId = e["sender"] is Map ? e["sender"]["id"] : e["sender"];
           final time = e["createdAt"]?.toString() ?? DateTime.now().toString();
 
-          return ChatMessage(
-            text: text,
-            isMe: senderId == widget.sender,
-            time: time,
-            messageId: e["id"],
-            status: MessageStatus.delivered,
-          );
+          return {
+            "text": text,
+            "isMe": senderId == widget.sender,
+            "time": time
+          };
         }).toList();
 
         isLoading = false;
       });
 
+      print("✅ Processed ${messages.length} messages");
       scrollToBottom();
     } catch (e) {
-      print("Error loading messages: $e");
+      print("❌ Error loading messages: $e");
       setState(() => isLoading = false);
-      showError("Failed to load messages");
     }
   }
 
   void connectSocket() {
-    socket = IO.io(
-      ApiService.baseUrl,
-      IO.OptionBuilder()
-          .setTransports(['websocket', 'polling'])
-          .enableAutoConnect()
-          .enableReconnection()
-          .setReconnectionAttempts(5)
-          .setReconnectionDelay(1000)
-          .setAuth({'token': widget.token})
-          .build(),
-    );
+    print("🔌 Connecting to: ${ApiService.baseUrl}");
+
+    socket = IO.io(ApiService.baseUrl, <String, dynamic>{
+      "transports": ["websocket", "polling"],
+      "autoConnect": true,
+    });
 
     socket.onConnect((_) {
-      print("✅ Socket connected");
+      print("✅ Socket connected!");
       setState(() => isConnected = true);
     });
 
     socket.onConnectError((data) {
       print("❌ Connection error: $data");
       setState(() => isConnected = false);
-      showError("Connection failed");
     });
 
     socket.onDisconnect((_) {
@@ -145,155 +96,57 @@ class _ChatPageState extends State<ChatPage> {
       setState(() => isConnected = false);
     });
 
-    socket.onReconnect((_) {
-      print("🔄 Reconnected");
-      setState(() => isConnected = true);
-    });
+    // Listen for messages
+    socket.on("message-${widget.sender}", (data) {
+      print("📨 Received message: $data");
 
-    // Listen for new messages
-    socket.on('newMessage', (data) {
-      print("📨 New message received: $data");
-
-      final senderId =
-          data["sender"] is Map ? data["sender"]["id"] : data["sender"];
-      if (senderId == widget.receiver) {
+      try {
         final text = data["text"]?.toString() ?? "";
-        final time = data["createdAt"]?.toString() ?? DateTime.now().toString();
+        final senderId =
+            data["sender"] is Map ? data["sender"]["id"] : data["sender"];
+        final receiverId =
+            data["receiver"] is Map ? data["receiver"]["id"] : data["receiver"];
 
-        setState(() {
-          messages.add(ChatMessage(
-            text: text,
-            isMe: false,
-            time: time,
-            messageId: data["id"],
-            status: MessageStatus.delivered,
-          ));
-        });
+        // Only add if relevant to this conversation
+        if ((senderId == widget.sender && receiverId == widget.receiver) ||
+            (senderId == widget.receiver && receiverId == widget.sender)) {
+          setState(() {
+            messages.add({
+              "text": text,
+              "isMe": senderId == widget.sender,
+              "time": DateTime.now().toString()
+            });
+          });
 
-        scrollToBottom();
-
-        // Send read receipt
-        socket.emit(
-            'messageRead', {'messageId': data["id"], 'senderId': senderId});
+          print("✅ Message added. Total: ${messages.length}");
+          scrollToBottom();
+        }
+      } catch (e) {
+        print("❌ Error processing message: $e");
       }
-    });
-
-    // Listen for message sent confirmation
-    socket.on('messageSent', (data) {
-      print("✅ Message sent confirmation: ${data['tempId']}");
-
-      setState(() {
-        final index = messages.indexWhere((m) => m.tempId == data['tempId']);
-        if (index != -1) {
-          messages[index].status = MessageStatus.sent;
-          messages[index] = ChatMessage(
-            text: messages[index].text,
-            isMe: messages[index].isMe,
-            time: messages[index].time,
-            tempId: messages[index].tempId,
-            messageId: data['id'],
-            status: MessageStatus.sent,
-          );
-        }
-      });
-    });
-
-    // Listen for message delivered
-    socket.on('messageDelivered', (data) {
-      print("📬 Message delivered: ${data['tempId']}");
-
-      setState(() {
-        final index = messages.indexWhere((m) => m.tempId == data['tempId']);
-        if (index != -1) {
-          messages[index].status = MessageStatus.delivered;
-        }
-      });
-    });
-
-    // Listen for message read
-    socket.on('messageRead', (data) {
-      print("👁️ Message read: ${data['messageId']}");
-
-      setState(() {
-        final index =
-            messages.indexWhere((m) => m.messageId == data['messageId']);
-        if (index != -1) {
-          messages[index].status = MessageStatus.read;
-        }
-      });
-    });
-
-    // Listen for typing indicator
-    socket.on('userTyping', (data) {
-      if (data['userId'] == widget.receiver) {
-        setState(() => receiverTyping = data['isTyping']);
-      }
-    });
-
-    // Listen for errors
-    socket.on('messageError', (data) {
-      print("❌ Message error: $data");
-
-      setState(() {
-        final index = messages.indexWhere((m) => m.tempId == data['tempId']);
-        if (index != -1) {
-          messages[index].status = MessageStatus.failed;
-        }
-      });
-
-      showError("Failed to send message");
     });
   }
 
   void sendMsg() {
     if (controller.text.trim().isEmpty) return;
 
-    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final text = controller.text.trim();
+    print("📤 Sending: $text");
 
-    // Add message to UI immediately (optimistic update)
+    // Add to UI immediately
     setState(() {
-      messages.add(ChatMessage(
-        text: text,
-        isMe: true,
-        time: DateTime.now().toString(),
-        tempId: tempId,
-        status: MessageStatus.sending,
-      ));
+      messages
+          .add({"text": text, "isMe": true, "time": DateTime.now().toString()});
     });
 
     controller.clear();
     scrollToBottom();
 
-    // Stop typing indicator
-    if (isTyping) {
-      isTyping = false;
-      socket.emit('typing', {'receiver': widget.receiver, 'isTyping': false});
-    }
-
     // Send via socket
-    socket.emit("sendMessage", {
-      "text": text,
-      "receiver": widget.receiver,
-      "tempId": tempId,
-    });
-  }
+    socket.emit("sendMessage",
+        {"text": text, "sender": widget.sender, "receiver": widget.receiver});
 
-  void retryMessage(ChatMessage message) {
-    if (message.tempId != null) {
-      setState(() {
-        final index = messages.indexOf(message);
-        if (index != -1) {
-          messages[index].status = MessageStatus.sending;
-        }
-      });
-
-      socket.emit("sendMessage", {
-        "text": message.text,
-        "receiver": widget.receiver,
-        "tempId": message.tempId,
-      });
-    }
+    print("✅ Message sent via socket");
   }
 
   void scrollToBottom() {
@@ -308,33 +161,11 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  void showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-
-  String getStatusIcon(MessageStatus status) {
-    switch (status) {
-      case MessageStatus.sending:
-        return '🕐';
-      case MessageStatus.sent:
-        return '✓';
-      case MessageStatus.delivered:
-        return '✓✓';
-      case MessageStatus.read:
-        return '✓✓';
-      case MessageStatus.failed:
-        return '❌';
-    }
-  }
-
   @override
   void dispose() {
     socket.dispose();
     controller.dispose();
     scrollController.dispose();
-    typingTimer?.cancel();
     super.dispose();
   }
 
@@ -342,17 +173,7 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.receiverName),
-            if (receiverTyping)
-              Text(
-                'typing...',
-                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-              ),
-          ],
-        ),
+        title: Text(widget.receiverName),
         actions: [
           Icon(
             isConnected ? Icons.circle : Icons.circle_outlined,
@@ -373,61 +194,49 @@ class _ChatPageState extends State<ChatPage> {
                     itemCount: messages.length,
                     itemBuilder: (_, i) {
                       final msg = messages[i];
-                      final timeStr = DateTime.parse(msg.time)
-                          .toLocal()
-                          .toString()
-                          .substring(11, 16);
+                      final isMe = msg["isMe"] ?? false;
+                      final time = msg["time"] ?? "";
+                      final timeStr = time.isNotEmpty
+                          ? DateTime.parse(time)
+                              .toLocal()
+                              .toString()
+                              .substring(11, 16)
+                          : "";
 
                       return Align(
-                        alignment: msg.isMe
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: GestureDetector(
-                          onLongPress: msg.status == MessageStatus.failed
-                              ? () => retryMessage(msg)
-                              : null,
-                          child: Container(
-                            margin: EdgeInsets.symmetric(
-                                vertical: 4, horizontal: 8),
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: msg.isMe ? Colors.blue : Colors.grey[300],
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  msg.text,
-                                  style: TextStyle(
-                                    color:
-                                        msg.isMe ? Colors.white : Colors.black,
+                        alignment:
+                            isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          margin:
+                              EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isMe ? Colors.blue : Colors.grey[300],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                msg["text"] ?? "",
+                                style: TextStyle(
+                                  color: isMe ? Colors.white : Colors.black,
+                                ),
+                              ),
+                              if (timeStr.isNotEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    timeStr,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isMe
+                                          ? Colors.white70
+                                          : Colors.black54,
+                                    ),
                                   ),
                                 ),
-                                SizedBox(height: 4),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      timeStr,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: msg.isMe
-                                            ? Colors.white70
-                                            : Colors.black54,
-                                      ),
-                                    ),
-                                    if (msg.isMe) ...[
-                                      SizedBox(width: 4),
-                                      Text(
-                                        getStatusIcon(msg.status),
-                                        style: TextStyle(fontSize: 10),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
                       );
@@ -436,16 +245,6 @@ class _ChatPageState extends State<ChatPage> {
           ),
           Container(
             padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 4,
-                  offset: Offset(0, -2),
-                ),
-              ],
-            ),
             child: Row(
               children: [
                 Expanded(
@@ -466,7 +265,7 @@ class _ChatPageState extends State<ChatPage> {
                 CircleAvatar(
                   backgroundColor: Colors.blue,
                   child: IconButton(
-                    icon: Icon(Icons.send, color: Colors.white),
+                    icon: Icon(Icons.send, color: Colors.white, size: 20),
                     onPressed: sendMsg,
                   ),
                 ),
